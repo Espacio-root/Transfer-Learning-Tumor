@@ -1,9 +1,11 @@
 # General Imports
 import os
+import imagehash
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
+from math import inf as INFINITE
 
 # PyTorch Imports
 import torch
@@ -13,25 +15,77 @@ import torchvision.models as models
 from torch.utils.data import Dataset, DataLoader
 
 # Huggingface Imports
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets, ClassLabel
 #|%%--%%| <ErGWh2AQVX|Y8hnsrHafW>
 r"""°°°
 # Dataset Used
-- Found on huggingface
-- https://huggingface.co/datasets/Simezu/brain-tumour-MRI-scan
-- Use command `!pip install datasets` to install the datasets library
+- https://huggingface.co/datasets/Simezu/brain-tumour-MRI-scan [huggingface] - 5.71k - 1.31k
+- https://huggingface.co/datasets/PranomVignesh/MRI-Images-of-Brain-Tumor [huggingface] - 3.76k - 1.6k
+- https://huggingface.co/datasets/rhyssh/Brain-Tumor-MRI-Dataset-Training - 800
 °°°"""
-#|%%--%%| <Y8hnsrHafW|iWWe8Skd2l>
+#|%%--%%| <Y8hnsrHafW|rFjuAcp09j>
 
 # Load the dataset
-dataset = load_dataset("Simezu/brain-tumour-MRI-scan")
+ds1 = load_dataset("Simezu/brain-tumour-MRI-scan")
+ds2 = load_dataset("PranomVignesh/MRI-Images-of-Brain-Tumor")
+ds3 = load_dataset("rhyssh/Brain-Tumor-MRI-Dataset-Training")
+
+#|%%--%%| <rFjuAcp09j|iWWe8Skd2l>
+
+def harmonize_labels(x, name):
+    if name == "ds1":
+        label_map = {
+            "1-notumor": "notumor", "2-glioma": "glioma", "3-meningioma": "meningioma", "4-pituitary": "pituitary"
+        }
+    else:
+        label_map = {
+            "no-tumor": "notumor", "glioma": "glioma", "meningioma": "meningioma", "pituitary": "pituitary"
+        }
+    x["label"] = label_map.get(x["label"], x["label"])
+    return x
+
+# Apply label harmonization on ds1
+ds1 = ds1.map(harmonize_labels, "ds1")
+ds1 = ds1.cast_column("label", ClassLabel(names=["glioma", "meningioma", "notumor", "pituitary"]))
+
+# Apply label harmonization on ds2
+ds2 = ds2.map(harmonize_labels, "ds2")
+ds2 = ds2.cast_column("label", ClassLabel(names=["glioma", "meningioma", "notumor", "pituitary"]))
+
+df_train = concatenate_datasets([ds1["train"], ds2["train"], ds3["train"]])
+df_test = concatenate_datasets([ds1["test"], ds2["test"], ds2["validation"]])
 
 # Convert to pandas DF
 df_train = dataset["train"].to_pandas()
 df_test = dataset["test"].to_pandas()
 
-print(len(dataset['train']))
-print(len(dataset['test']))
+# Check for duplicates and remove
+def image_hash(image_path):
+    return str(imagehash.average_hash(Image.open(image_path["path"])))
+
+def remove_duplicates(df):
+    df["image_hash"] = df["image"].apply(image_hash)
+    df_dedup = df.drop_duplicates(subset="image_hash")
+    print(f"Removed {len(df) - len(df_dedup)} duplicates")
+    return df_dedup.drop(columns="image_hash")
+
+def remove_test_from_train(df_train, df_test):
+    train_hashes = set(df_train["image"].apply(image_hash))
+    test_hashes = set(df_test["image"].apply(image_hash))
+    common_hashes = train_hashes.intersection(test_hashes)
+
+    df_train_clean = df_train[~df_train["image"].apply(image_hash).isin(common_hashes)]
+    print(f"Removed {len(df_train) - len(df_train_clean)} images from train set that were present in test set")
+    return df_train_clean
+
+df_train = remove_duplicates(df_train)
+df_test = remove_duplicates(df_test)
+
+df_train = remove_test_from_train(df_train, df_test)
+
+print(f"Train: {len(df_train)}")
+print(f"Test: {len(df_test)}")
+print(f"Train/Test Ratio: {len(df_train) / (len(df_train) + len(df_test)):.2f}")
 #|%%--%%| <iWWe8Skd2l|Z0UPfrDb4C>
 r"""°°°
 # Exploratory Data Analysis (EDA)
@@ -157,6 +211,15 @@ Training Loop
 °°°"""
 #|%%--%%| <I8FMtYGYll|LkttzNCOHZ>
 
+def get_best_loss():
+    losses = []
+    for file in os.listdir():
+        if file.startswith("model-") and file.endswith(".pth"):
+            losses.append(float(file.split("-")[1].split(".pth")[0]))
+    if not len(losses):
+        return INFINITE
+    return max(losses)
+
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -195,6 +258,10 @@ for epoch in range(n_epochs):
             total += labels.size(0)
             test_correct += (predicted == labels).sum().item()
     print(f"\tTest Loss: {test_loss:.4f}")
-    print(f"\tTest Accuracy: {100*test_correct/total:.2f}%\n")
+    print(f"\tTest Accuracy: {100*test_correct/total:.2f}%")
 
-torch.save(model.state_dict(), f'model-{test_loss}.pth')
+    if (test_loss < get_best_loss()):
+        model_path = f"model-{test_loss}.pth"
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved at {model_path}")
+    print()
