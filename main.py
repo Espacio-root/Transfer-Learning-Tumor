@@ -221,7 +221,10 @@ r"""°°°
 model = models.resnet50(pretrained=True)
 
 n_classes = len(df_train["label"].unique())
-model.fc = torch.nn.Linear(model.fc.in_features, n_classes)
+model.fc = torch.nn.Sequential(
+    torch.nn.Dropout(0.5),  # to prevent overfitting
+    torch.nn.Linear(model.fc.in_features, n_classes)
+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -241,7 +244,7 @@ def get_best_loss():
     return min(losses)
 
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
 
 model.eval()
 test_loss = 0.0
@@ -268,7 +271,7 @@ r"""°°°
 °°°"""
 #|%%--%%| <oth5ejWuYH|mjl9MZY4mr>
 
-n_epochs = 10
+n_epochs = 20
 train_losses = []
 test_losses = []
 accuracies = []
@@ -403,6 +406,9 @@ r"""°°°
 - Make predictions on 9 random images
 °°°"""
 #|%%--%%| <PhvAjrKU2z|bS0cWbFOOq>
+
+best_loss = get_best_loss()
+model.load_state_dict(torch.load(f"model-{best_loss}.pth"))
 
 model.eval()
 sample_images = df_test.sample(9)

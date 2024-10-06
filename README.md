@@ -1,3 +1,8 @@
+## Links
+1. [code](https://github.com/Espacio-root/Transfer-Learning-Tumor/blob/master/main.ipynb)
+2. [document](https://drive.google.com/file/d/1QFTZTuD8EdyLQX4qOS9M04QTPy5gunxf/view?usp=sharing)
+3. [video](https://www.loom.com/share/fcda20010a434e1f9f0a6a7bec32cef2?sid=3e498e03-3a1d-4cb3-8b85-44e5757f4d63)
+
 # Brain Tumor MRI Classification Documentation
 
 ## Table of Contents
@@ -67,13 +72,15 @@ For each epoch, the following metrics are reported:
 - **Train Loss**: Loss value on the training dataset.
 - **Test Loss**: Loss value on the test dataset.
 - **Test Accuracy**: Percentage of correctly predicted labels on the test dataset.
+- Test Precision: Calculated using the confusion matrix.
+- Test Recall: Calculated using the confusion matrix.
 
 ## Instructions
 
 ### Requirements
 Ensure you have the following libraries installed:
 ```bash
-pip install torch torchvision datasets imagehash matplotlib pandas
+pip install torch torchvision datasets imagehash matplotlib pandas numpy
 ```
 
 ### Running the Code
@@ -90,3 +97,10 @@ huggingface-cli login
 jupyter notebook main.ipynb
 ```
 4. Run the cells in the notebook to execute the preprocessing, training, and evaluation steps.
+
+
+## Author
+
+- **Abdullah Danish**  
+  [abdullah.24bcs10054@sst.scaler.com](mailto:abdullah.24bcs10054@sst.scaler.com)
+  GitHub: [Espacio-root](https://github.com/Espacio-root)
