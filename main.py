@@ -14,6 +14,9 @@ from torchvision import transforms
 import torchvision.models as models
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 
+# Sklearn Imports
+from sklearn.metrics import precision_score, recall_score
+
 # Huggingface Imports
 from datasets import load_dataset, concatenate_datasets, ClassLabel
 #|%%--%%| <ErGWh2AQVX|Y8hnsrHafW>
@@ -266,6 +269,12 @@ r"""°°°
 #|%%--%%| <oth5ejWuYH|mjl9MZY4mr>
 
 n_epochs = 10
+train_losses = []
+test_losses = []
+accuracies = []
+precisions = []
+recalls = []
+
 for epoch in range(n_epochs):
     model.train()
     train_loss = 0.0
@@ -280,13 +289,19 @@ for epoch in range(n_epochs):
         optimizer.step()
 
         train_loss += loss.item()
-    print(f"Epoch: {epoch+1}")
+
+    train_loss /= len(train_loader)
+    train_losses.append(train_loss)
+
+    print(f"Epoch: {epoch + 1}")
     print(f"\tTrain Loss: {train_loss:.4f}")
 
     model.eval()
     test_loss = 0.0
     test_correct = 0
     total = 0
+    all_predicted = []
+    all_labels = []
 
     with torch.no_grad():
         for images, labels in test_loader:
@@ -299,15 +314,89 @@ for epoch in range(n_epochs):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             test_correct += (predicted == labels).sum().item()
-    print(f"\tTest Loss: {test_loss:.4f}")
-    print(f"\tTest Accuracy: {100*test_correct/total:.2f}%")
 
-    if (test_loss < get_best_loss()):
-        model_path = f"model-{test_loss}.pth"
+            all_predicted.extend(predicted.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    test_loss /= len(test_loader)
+    test_losses.append(test_loss)
+
+    accuracy = 100 * test_correct / total
+    accuracies.append(accuracy)
+    precision = precision_score(all_labels, all_predicted, average='weighted')
+    precisions.append(precision)
+    recall = recall_score(all_labels, all_predicted, average='weighted')
+    recalls.append(recall)
+
+    print(f"\tTest Loss: {test_loss:.4f}")
+    print(f"\tTest Accuracy: {accuracy:.2f}%")
+    print(f"\tTest Precision: {precision:.4f}")
+    print(f"\tTest Recall: {recall:.4f}")
+
+    if test_loss < get_best_loss():
+        model_path = f"model-{test_loss:.4f}.pth"
         torch.save(model.state_dict(), model_path)
         print(f"Model saved at {model_path}")
     print()
-#|%%--%%| <mjl9MZY4mr|PhvAjrKU2z>
+#|%%--%%| <mjl9MZY4mr|LcsXETrNhw>
+
+best_loss = get_best_loss()
+model.load_state_dict(torch.load(f"model-{best_loss}.pth"))
+
+metrics = {
+    'Epochs': list(range(1, n_epochs + 1)),
+    'Train Loss': train_losses,
+    'Test Loss': test_losses,
+    'Accuracy': accuracies,
+    'Precision': precisions,
+    'Recall': recalls,
+}
+
+metrics_df = pd.DataFrame(metrics)
+metrics_df.to_csv('training_metrics.csv', index=False)
+print("Metrics saved to 'training_metrics.csv'")
+
+# Plotting
+plt.figure(figsize=(14, 8))
+
+# Plotting Train and Test Loss
+plt.subplot(2, 2, 1)
+plt.plot(metrics['Epochs'], train_losses, label='Train Loss', color='blue')
+plt.plot(metrics['Epochs'], test_losses, label='Test Loss', color='orange')
+plt.title('Train and Test Loss')
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.legend()
+
+# Plotting Accuracy
+plt.subplot(2, 2, 2)
+plt.plot(metrics['Epochs'], accuracies, label='Accuracy', color='green')
+plt.title('Test Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy (%)')
+plt.legend()
+
+# Plotting Precision
+plt.subplot(2, 2, 3)
+plt.plot(metrics['Epochs'], precisions, label='Precision', color='purple')
+plt.title('Test Precision')
+plt.xlabel('Epochs')
+plt.ylabel('Precision')
+plt.legend()
+
+# Plotting Recall
+plt.subplot(2, 2, 4)
+plt.plot(metrics['Epochs'], recalls, label='Recall', color='red')
+plt.title('Test Recall')
+plt.xlabel('Epochs')
+plt.ylabel('Recall')
+plt.legend()
+
+# Show the plots
+plt.tight_layout()
+plt.show()
+
+#|%%--%%| <LcsXETrNhw|PhvAjrKU2z>
 r"""°°°
 # Inference
 - Load the best model
@@ -315,10 +404,7 @@ r"""°°°
 °°°"""
 #|%%--%%| <PhvAjrKU2z|bS0cWbFOOq>
 
-best_loss = get_best_loss()
-model.load_state_dict(torch.load(f"model-{best_loss}.pth"))
 model.eval()
-
 sample_images = df_test.sample(9)
 fig, axes = plt.subplots(3, 3, figsize=(10,10))
 for ax, (img_path, label) in zip(axes.flatten(), sample_images.itertuples(index=False)):
